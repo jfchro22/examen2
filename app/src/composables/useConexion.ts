@@ -1,26 +1,44 @@
-import { ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import { Network } from '@capacitor/network';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 /**
- * TODO [M7] Capacidades nativas (6 pts en total: este archivo, PerfilPage.vue y AndroidManifest.xml).
- *
- * useConexion() devuelve { conectado, tipo }:
- *   - Valor inicial con Network.getStatus()                       (@capacitor/network)
- *   - Se actualiza solo con Network.addListener('networkStatusChange', ...)
- *   - El oyente se libera (handle.remove()) cuando se destruye la página que lo usa (onUnmounted).
- *   Las páginas Equipos y Formulario ya muestran el aviso "Sin conexión" y deshabilitan Guardar con `conectado`.
+ * [M7] useConexion() devuelve { conectado, tipo }.
+ * Estado inicial con Network.getStatus(); se actualiza con networkStatusChange;
+ * el oyente se libera al destruir la página que lo usa.
  */
 export function useConexion() {
   const conectado = ref(true);
   const tipo = ref('unknown');
-  // TODO [M7]
+  let oyente: PluginListenerHandle | null = null;
+  let destruido = false;
+
+  onMounted(async () => {
+    const estado = await Network.getStatus();
+    conectado.value = estado.connected;
+    tipo.value = estado.connectionType;
+
+    const handle = await Network.addListener('networkStatusChange', (nuevo) => {
+      conectado.value = nuevo.connected;
+      tipo.value = nuevo.connectionType;
+    });
+    // Si la página se destruyó mientras se registraba el oyente, se libera de inmediato
+    if (destruido) await handle.remove();
+    else oyente = handle;
+  });
+
+  onUnmounted(() => {
+    destruido = true;
+    oyente?.remove();
+    oyente = null;
+  });
+
   return { conectado, tipo };
 }
 
-/**
- * TODO [M7] vibrar(): vibración breve de confirmación con Haptics.impact({ style: ImpactStyle.Light })
- *   (@capacitor/haptics). En el navegador NO debe hacer nada: use Capacitor.isNativePlatform().
- *   Se llama después de guardar y de eliminar con éxito.
- */
+/** [M7] Vibración breve de confirmación. En el navegador no hace nada. */
 export async function vibrar() {
-  // TODO [M7]
+  if (!Capacitor.isNativePlatform()) return;
+  await Haptics.impact({ style: ImpactStyle.Light });
 }
